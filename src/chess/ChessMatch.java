@@ -16,6 +16,7 @@ public class ChessMatch {
 	private int turn;
 	private Color currentPlayer;
 	private boolean check;
+	private boolean checkMate;
 
 	private List<Piece> piecesOnTheBoard;
 	private List<Piece> capturedPieces;
@@ -42,6 +43,10 @@ public class ChessMatch {
 		return check;
 	}
 
+	public boolean getCheckmate() {
+		return checkMate;
+	}
+	
 	public ChessPiece[][] getPieces() {
 		ChessPiece[][] m = new ChessPiece[board.getRows()][board.getColumns()];
 		for (int i = 0; i < board.getRows(); ++i) {
@@ -70,12 +75,16 @@ public class ChessMatch {
 			throw new ChessException("You cannot put yourself in check");
 		}
 		check = (testCheck(opponent(currentPlayer))) ? true : false;
-		nextTurn();
+		
+		if(testCheckMate(opponent(currentPlayer))) checkMate = true;
+		else nextTurn();
+		
 		return (ChessPiece) capturedPiece;
 	}
 
 	private Piece makeMove(Position src, Position tgt) {
-		Piece p = board.removePiece(src);
+		ChessPiece p = (ChessPiece) board.removePiece(src);
+		p.increaseMoveCount();
 		Piece capturedPiece = board.removePiece(tgt);
 		board.placePiece(p, tgt);
 		if (capturedPiece != null) {
@@ -86,7 +95,8 @@ public class ChessMatch {
 	}
 
 	private void undoMove(Position src, Position tgt, Piece capturedPiece) {
-		Piece p = board.removePiece(tgt);
+		ChessPiece p = (ChessPiece) board.removePiece(tgt);
+		p.decreaseMoveCount();
 		board.placePiece(p, src);
 
 		if (capturedPiece != null) {
@@ -143,6 +153,40 @@ public class ChessMatch {
 		return false;
 	}
 
+	/*
+	 * this method could have been written in a more efficient way.
+	 * instead of using a whole boolean matrix to represent the positions
+	 * each piece can move to, we could have achieved the same result by simply
+	 * storing each coordinate on a unordered_set (i think in java it's called a
+	 * hashSet), that way we could avoid the O(n^4) time complexity of this method)
+	 * 
+	 * if this was an actual software and not just a practice project, i would definitely
+	 * try a different approach instead of just copying a whole boolean matrix for each piece.
+	 * 
+	 * */
+	private boolean testCheckMate(Color color) {
+		if (!testCheck(color)) return false;
+		List<Piece> list = piecesOnTheBoard.stream().filter(x -> ((ChessPiece)x).getColor() == color).collect(Collectors.toList());
+		for (Piece p : list) {
+			boolean[][] mat = p.possibleMoves();
+			for (int i=0; i<board.getRows(); i++) {
+				for (int j=0; j<board.getColumns(); j++) {
+					if (mat[i][j]) {
+						Position source = ((ChessPiece)p).getChessPosition().toPosition();
+						Position target = new Position(i, j);
+						Piece capturedPiece = makeMove(source, target);
+						boolean testCheck = testCheck(color);
+						undoMove(source, target, capturedPiece);
+						if (!testCheck) {
+							return false;
+						}
+					}
+				}
+			}
+		}
+		return true;
+	}	
+	
 	private void placeNewPiece(char column, int row, ChessPiece piece) {
 		board.placePiece(piece, new ChessPosition(column, row).toPosition());
 		piecesOnTheBoard.add(piece);
